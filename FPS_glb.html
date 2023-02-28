@@ -1,0 +1,288 @@
+
+<html>
+ 
+<head>
+    <meta charset="utf-8">
+    <title>メタバース</title>
+    
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+     
+    </style>
+</head>
+<body>
+ <h1>メタバース</h1>
+
+    <div id="WebGL-output">
+    </div>
+ 
+<script type="module">
+    import * as THREE from'https://unpkg.com/three@0.126.1/build/three.module.js';
+    // import { OrbitControls } from 'https://unpkg.com/three@0.126.1/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from 'https://unpkg.com/three@0.126.1/examples/jsm/loaders/GLTFLoader.js';
+    import { PointerLockControls } from "https://unpkg.com/three@0.126.1/examples/jsm/controls/PointerLockControls.js";
+ 
+    let camera;
+    let scene;
+    let renderer;
+    let model;
+ let moveForward =false;
+ let moveBackward =false;
+ let moveLeft =false;
+ let moveRight =false;
+ let controls;
+ let prevTime=performance.now();
+
+ const velocity=new THREE.Vector3();
+ const direction =new THREE.Vector3();
+
+
+//キーボード操作
+const onKeyDown=(e)=>{
+    switch(e.code) {
+        case "KeyW":
+            moveForward=true;
+            console.log(moveForward);
+            break;
+        case "KeyA":
+            moveBackward=true;
+            console.log(moveBackward);
+            break;
+        case "KeyS":
+            moveLeft=true;
+            break;
+        case "KeyD":
+            moveRight=true;
+            break;
+    };
+};
+
+const onKeyUp=(e)=>{
+    switch(e.code) {
+        case "KeyW":
+            moveForward=false;
+            break;
+        case "KeyA":
+            moveBackward=false;
+            break;
+        case "KeyS":
+            moveLeft=false;
+            break;
+        case "KeyD":
+            moveRight=false;
+            break;
+    };
+};
+
+
+
+
+document.addEventListener("keydown",onKeyDown);
+document.addEventListener("keyup",onKeyUp);
+
+    init();
+    animate();
+    
+    function init() {
+        //シーンの作成
+        scene = new THREE.Scene();
+ 
+        //カメラの作成
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        //カメラセット
+        camera.position.set(200, 30, 0);
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+        
+        //  // 滑らかにカメラコントローラーを制御する
+        // const controls = new OrbitControls(camera, document.body);
+        // controls.enableDamping = true;
+        // controls.dampingFactor = 0.2;
+
+
+        //光源
+        const dirLight = new THREE.SpotLight(0xffffff,1.5);//color,強度
+        dirLight.position.set(-20, 30, 30);
+        scene.add(dirLight);
+
+         // canvas 要素の参照を取得する
+         const canvas = document.querySelector('#myCanvas');
+ 
+        //レンダラー
+        renderer = new THREE.WebGLRenderer({ 
+            canvas: canvas,
+            alpha: true,
+            antialias: true
+        });
+        renderer.setClearColor(new THREE.Color(0xffffff));
+        renderer.setSize(window.innerWidth-200, window.innerHeight-200);
+       
+
+                //FPS視点
+             controls=new PointerLockControls(camera,renderer.domElement);
+        window.addEventListener("click", ()=>{
+            controls.lock();
+        });
+        
+        requestAnimationFrame(tick);
+
+
+ 
+ 
+
+
+
+        //glbファイルの読み込み
+        const loader = new GLTFLoader();
+ 
+        loader.load('https://rawcdn.githack.com/ZyonosukeChiba/glb-/f073f0639b302a10ac7d31f198e8756775a4f314/woodhome13.glb', function(gltf) {
+            model = gltf.scene;
+            model.traverse((object) => { //モデルの構成要素
+                if(object.isMesh) { //その構成要素がメッシュだったら
+                object.material.trasparent = true;//透明許可
+                object.material.opacity = 0.8;//透過
+                object.material.depthTest = true;//陰影で消える部分
+                }})
+				
+            scene.add(model);
+        }, undefined, function(e) {
+            console.error(e);
+        });
+ 
+        document.getElementById("WebGL-output").appendChild(renderer.domElement);
+    
+        
+        // マウス座標管理用のベクトルを作成
+        const mouse = new THREE.Vector2();
+
+   
+
+        const geometry = new THREE.BoxBufferGeometry(3, 3, 3);
+
+        // マウスとの交差を調べたいものは配列に格納する
+        const meshList = [];
+        
+          const material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+          const mesh = new THREE.Mesh(geometry, material);
+       
+          scene.add(mesh);
+        mesh.position.y = 10;
+        mesh.position.x=-3;
+          // 配列に保存
+          meshList.push(mesh);
+        
+
+        // 平行光源
+        const directionalLight = new THREE.DirectionalLight(0xffffff);
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+
+        // 環境光源
+        const ambientLight = new THREE.AmbientLight(0x333333);
+        scene.add(ambientLight);
+
+        // レイキャストを作成
+        const raycaster = new THREE.Raycaster();
+
+        canvas.addEventListener('mousemove', handleMouseMove);
+        tick();
+
+        // マウスを動かしたときのイベント
+        function handleMouseMove(event) {
+          const element = event.currentTarget;
+          // canvas要素上のXY座標
+          const x = event.clientX - element.offsetLeft;
+          const y = event.clientY - element.offsetTop;
+          // canvas要素の幅・高さ
+          const w = element.offsetWidth;
+          const h = element.offsetHeight;
+
+          // -1〜+1の範囲で現在のマウス座標を登録する
+          mouse.x = (x / w) * 2 - 1;
+          mouse.y = -(y / h) * 2 + 1;
+        }
+
+        // 毎フレーム時に実行されるループイベントです
+        function tick() {
+          // レイキャスト = マウス位置からまっすぐに伸びる光線ベクトルを生成
+          raycaster.setFromCamera(mouse, camera);
+
+          // その光線とぶつかったオブジェクトを得る
+          const intersects = raycaster.intersectObjects(meshList);
+
+          meshList.map((mesh) => {
+            // 交差しているオブジェクトが1つ以上存在し、
+            // 交差しているオブジェクトの1番目(最前面)のものだったら
+            if (intersects.length > 0 && mesh === intersects[0].object) {
+              // 色を赤くする
+              mesh.material.color.setHex(0xff0000);
+              mesh.material.color.setHex(0xff0000);
+              window.addEventListener(`click`, () => {
+            if (event.shiftKey) {
+            window.open('https://www.virtual-akihabara.com/');
+            }
+        });
+            } else {
+              // それ以外は元の色にする
+              mesh.material.color.setHex(0xffffff);
+            }
+          });
+
+          // レンダリング
+          renderer.render(scene, camera);
+          requestAnimationFrame(tick);
+        }
+	
+
+	
+	
+	
+	}
+ 
+    function animate() {
+        requestAnimationFrame(animate);
+        const time =performance.now();
+        //前後後進判定
+        direction.z=Number(moveForward)-Number(moveBackward);
+        direction.x=Number(moveRight)-Number(moveLeft);
+
+        //ポインターがオンになったら
+        if(controls.isLocked){
+            const delta=(time-prevTime)/1000;
+
+            // 減衰
+            velocity.z -=velocity.z*5.0*delta;
+            velocity.x -=velocity.x*5.0*delta;
+
+
+
+            if(moveForward ||moveBackward){
+                velocity.z -=direction.z*200*delta;
+            }
+            if(moveRight||moveLeft){
+                velocity.x -=direction.x*200*delta;
+            }
+
+
+            controls.moveForward(-velocity.z*delta);
+            controls.moveRight(-velocity.x*delta);
+        }
+        prevTime=time;
+
+
+        renderer.render(scene, camera);
+
+
+    }
+ 
+</script>
+<p>   クリックで操作開始,escキーで操作終了</p>
+<p>   wで前進,aで後退,sで左にすすむ,dで右に進む</p>
+<p>   テーブルの上の立方体をshuft+クリックで別サイトへ</p>
+
+<canvas id="myCanvas"></canvas>
+</body>
+  
